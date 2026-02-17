@@ -19,6 +19,8 @@ Download any media from Telegram Web with ease. Works on both web.telegram.org/k
 • 📁 Organized downloads — files saved in TG_Media/{ChatName}/
 • ⌨️ Keyboard shortcut (Ctrl+Shift+D)
 • 🎯 Smart duplicate detection — won't re-download existing files
+• 📏 Configurable max file size — auto-skip videos above your chosen limit
+• 🛡️ Resilient downloads — graceful error recovery, never gets stuck
 
 🔒 PRIVACY FIRST:
 All processing happens locally on your device. No data is sent to external servers.

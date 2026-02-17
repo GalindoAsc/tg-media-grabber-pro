@@ -230,7 +230,7 @@ body {
 /* ── Buttons ─────────────────────────── */
 .action-buttons {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 8px;
     margin-bottom: 10px;
 }
@@ -517,6 +517,23 @@ body {
     outline: none;
     border-color: var(--accent-1);
     box-shadow: 0 0 0 3px rgba(99, 140, 255, 0.1);
+}
+
+.input-select {
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font);
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.25s;
+}
+
+.input-select:focus {
+    outline: none;
+    border-color: var(--accent-1);
 }
 
 /* ── Donate Section ──────────────────── */

@@ -16,6 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnGallery = $("#btnGallery");
   const btnBulk = $("#btnBulk");
   const btnScan = $("#btnScan");
+  const btnRescan = $("#btnRescan");
   const btnSettingsToggle = $("#btnSettingsToggle");
   const settingsPanel = $("#settingsPanel");
   const prog = $("#prog");
@@ -27,6 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const folder = $("#folder");
   const togRestrict = $("#togRestrict");
   const togButtons = $("#togButtons");
+  const selMaxSize = $("#selMaxSize");
   const historyPanel = $("#historyPanel");
   const historyList = $("#historyList");
   const historyCount = $("#historyCount");
@@ -75,6 +77,13 @@ document.addEventListener("DOMContentLoaded", () => {
     folder.value = v;
     save({ folderName: v });
     send({ action: "updateSettings", folderName: v });
+  });
+
+  // ── Max File Size ──
+  selMaxSize.addEventListener("change", () => {
+    const v = parseInt(selMaxSize.value) || 0;
+    save({ maxFileSizeMB: v });
+    send({ action: "updateSettings", maxFileSizeMB: v });
   });
 
   // ── History Toggle ──
@@ -127,21 +136,45 @@ document.addEventListener("DOMContentLoaded", () => {
         btnGallery.disabled = false;
         btnBulk.disabled = false;
         btnScan.disabled = false;
+        btnRescan.disabled = false;
+        // Check if cached scan exists — show info in status
+        send({ action: "getCachedScan" }, (cr) => {
+          if (cr?.cached) {
+            const ago = cr.agoMinutes < 1 ? "just now" : `${cr.agoMinutes}m ago`;
+            statusTxt.textContent = `📦 ${cr.count} items cached (${ago})`;
+          }
+        });
+        // Check if download is in progress (restore progress bar on popup reopen)
+        send({ action: "getDownloadStatus" }, (ds) => {
+          if (ds?.active) {
+            setLoading(btnBulk, true);
+            statusTxt.textContent = `⬇ ${ds.downloaded}/${ds.total}${ds.skipped ? ` · ${ds.skipped} dup` : ""}`;
+            btnBulk.querySelector("span").textContent = `Downloading...`;
+          }
+        });
       } else {
         dot.classList.remove("on");
         statusTxt.textContent = "Open web.telegram.org first";
         btnGallery.disabled = true;
         btnBulk.disabled = true;
         btnScan.disabled = true;
+        btnRescan.disabled = true;
       }
     });
   }
 
-  // ── Scan ──
+  // ── Scan (uses cache if available) ──
   btnScan.addEventListener("click", () => {
     setLoading(btnScan, true);
     statusTxt.textContent = "🔍 Scanning chat...";
     send({ action: "scanAll" });
+  });
+
+  // ── Re-scan (always fresh) ──
+  btnRescan.addEventListener("click", () => {
+    setLoading(btnRescan, true);
+    statusTxt.textContent = "🔄 Re-scanning chat...";
+    send({ action: "scanAll", force: true });
   });
 
   // ── Gallery ──
@@ -175,10 +208,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (msg.action === "scanComplete") {
       setLoading(btnScan, false);
-      statusTxt.textContent = `✅ ${msg.count} files found`;
+      setLoading(btnRescan, false);
+      const cacheLabel = msg.fromCache ? "📦" : "✅";
+      statusTxt.textContent = `${cacheLabel} ${msg.count} files found`;
       if (msg.count > 0) {
-        btnBulk.disabled = false;
-        btnBulk.querySelector("span").textContent = `Download (${msg.count})`;
+        btnBulk.querySelector("span").textContent = `Download All`;
       }
       if (msg.counts) {
         $("#cPhotos").textContent = msg.counts.photos || 0;
@@ -241,10 +275,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   function save(d) { chrome.storage.local.set(d); }
   function load() {
-    chrome.storage.local.get(["buttonsEnabled", "restrictedEnabled", "folderName"], (d) => {
+    chrome.storage.local.get(["buttonsEnabled", "restrictedEnabled", "folderName", "maxFileSizeMB"], (d) => {
       if (d.buttonsEnabled === false) togButtons.classList.remove("on");
       if (d.restrictedEnabled === false) togRestrict.classList.remove("on");
       if (d.folderName) folder.value = d.folderName;
+      if (d.maxFileSizeMB !== undefined) selMaxSize.value = String(d.maxFileSizeMB);
     });
   }
 

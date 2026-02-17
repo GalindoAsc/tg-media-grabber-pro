@@ -76,6 +76,13 @@
       </svg>
       <span>Scan</span>
     </button>
+    <button id="btnRescan" class="btn secondary" title="Force a fresh re-scan">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+        <path
+          d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z" />
+      </svg>
+      <span>Re-scan</span>
+    </button>
     <button id="btnGallery" class="btn secondary">
       <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
         <path
@@ -124,6 +131,17 @@
     <div class="setting-row">
       <span>Restricted Mode</span>
       <div id="togRestrict" class="toggle on"></div>
+    </div>
+
+    <div class="setting-row" style="margin-top:12px;">
+      <span>Max video size</span>
+      <select id="selMaxSize" class="input-select">
+        <option value="0">No limit</option>
+        <option value="500">500 MB</option>
+        <option value="1024">1 GB</option>
+        <option value="2048" selected>2 GB</option>
+        <option value="4096">4 GB</option>
+      </select>
     </div>
   </div>
 

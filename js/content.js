@@ -28,6 +28,7 @@
     buttonsEnabled: true,
     restrictedEnabled: true,
     folderName: "TG_Media",
+    maxFileSizeMB: 2048, // Default 2 GB, 0 = no limit
     downloading: false,
     observerActive: false,
     galleryOpen: false,
@@ -496,6 +497,12 @@
       pending.reject(new Error(event.data.error));
     }
 
+    if (type === "TG_GRABBER_DOWNLOAD_CANCELLED" && _dlPendingRequests.has(requestId)) {
+      const pending = _dlPendingRequests.get(requestId);
+      _dlPendingRequests.delete(requestId);
+      pending.reject(new Error("__SKIPPED__"));
+    }
+
     if (type === "TG_GRABBER_DOWNLOAD_PROGRESS") {
       const { pct, received, total } = event.data;
       if (pct % 20 === 0) {
@@ -531,6 +538,23 @@
     }
   });
 
+  // Track currently active download requestId for cancellation
+  let _activeDlRequestId = null;
+
+  function cancelActiveDownload() {
+    if (_activeDlRequestId !== null) {
+      // Cancel SW download in injected.js
+      window.postMessage({ type: "TG_GRABBER_CANCEL_DOWNLOAD", requestId: _activeDlRequestId }, "*");
+      // Also reject the pending promise in content.js
+      const pending = _dlPendingRequests.get(_activeDlRequestId);
+      if (pending) {
+        _dlPendingRequests.delete(_activeDlRequestId);
+        pending.reject(new Error("__SKIPPED__"));
+      }
+      _activeDlRequestId = null;
+    }
+  }
+
   /**
    * Download a video/audio by sending the stream URL to injected.js,
    * which fetches through Telegram's Service Worker in page context.
@@ -538,14 +562,16 @@
   function downloadViaInjected(streamUrl, timeoutMs = 120000) {
     return new Promise((resolve, reject) => {
       const requestId = ++_dlRequestId;
+      _activeDlRequestId = requestId;
       const timer = setTimeout(() => {
         _dlPendingRequests.delete(requestId);
+        if (_activeDlRequestId === requestId) _activeDlRequestId = null;
         reject(new Error("SW download timeout"));
       }, timeoutMs);
 
       _dlPendingRequests.set(requestId, {
-        resolve: (data) => { clearTimeout(timer); resolve(data); },
-        reject: (err) => { clearTimeout(timer); reject(err); },
+        resolve: (data) => { clearTimeout(timer); if (_activeDlRequestId === requestId) _activeDlRequestId = null; resolve(data); },
+        reject: (err) => { clearTimeout(timer); if (_activeDlRequestId === requestId) _activeDlRequestId = null; reject(err); },
       });
 
       window.postMessage({
@@ -602,14 +628,16 @@
   function downloadViaAPI(msgId, peerId, includeVideo = false, timeoutMs = 120000) {
     return new Promise((resolve, reject) => {
       const requestId = ++_dlRequestId;
+      _activeDlRequestId = requestId;
       const timer = setTimeout(() => {
         _dlPendingRequests.delete(requestId);
+        if (_activeDlRequestId === requestId) _activeDlRequestId = null;
         reject(new Error("API download timeout"));
       }, timeoutMs);
 
       _dlPendingRequests.set(requestId, {
-        resolve: (data) => { clearTimeout(timer); resolve(data); },
-        reject: (err) => { clearTimeout(timer); reject(err); },
+        resolve: (data) => { clearTimeout(timer); if (_activeDlRequestId === requestId) _activeDlRequestId = null; resolve(data); },
+        reject: (err) => { clearTimeout(timer); if (_activeDlRequestId === requestId) _activeDlRequestId = null; reject(err); },
       });
 
       window.postMessage({
@@ -627,6 +655,32 @@
    */
   function revokeInjectedUrl(url) {
     window.postMessage({ type: "TG_GRABBER_REVOKE_URL", url }, "*");
+  }
+
+  /**
+   * Get media metadata (filename, size, etc.) WITHOUT downloading.
+   * Uses injected.js getMediaMetadata() to read Telegram's internal data.
+   */
+  function getMetadata(msgId, peerId) {
+    return new Promise((resolve) => {
+      const requestId = ++_dlRequestId;
+      const timer = setTimeout(() => resolve(null), 3000); // Quick timeout
+      const handler = (event) => {
+        if (event.source !== window) return;
+        if (event.data?.type === "TG_GRABBER_METADATA_RESULT" && event.data.requestId === requestId) {
+          clearTimeout(timer);
+          window.removeEventListener("message", handler);
+          resolve(event.data.metadata);
+        }
+      };
+      window.addEventListener("message", handler);
+      window.postMessage({
+        type: "TG_GRABBER_GET_METADATA",
+        msgId: parseInt(msgId),
+        peerId: parseInt(peerId),
+        requestId,
+      }, "*");
+    });
   }
 
   /**
@@ -793,19 +847,23 @@
     // If not found, try to re-open it (retry logic from sharedMediaScan)
     if (!searchSuper) {
       log.w(`Shared Media sidebar closed, re-opening for ${name}...`);
-      const clickTargets = [
-        ".chat-info .content", ".chat-info .person", ".top .person",
-        ".chat-info .peer-title", ".top .peer-title", ".chat-info .avatar-element"
-      ];
-      for (const sel of clickTargets) {
-        const t = document.querySelector(sel);
-        if (t) { t.click(); await sleep(800); break; }
-      }
-      // Wait for it
-      for (let i = 0; i < 15; i++) {
-        searchSuper = document.querySelector(".search-super");
-        if (searchSuper) break;
-        await sleep(300);
+      try {
+        const clickTargets = [
+          ".chat-info .content", ".chat-info .person", ".top .person",
+          ".chat-info .peer-title", ".top .peer-title", ".chat-info .avatar-element"
+        ];
+        for (const sel of clickTargets) {
+          const t = document.querySelector(sel);
+          if (t) { t.click(); await sleep(800); break; }
+        }
+        // Wait for it
+        for (let i = 0; i < 15; i++) {
+          searchSuper = document.querySelector(".search-super");
+          if (searchSuper) break;
+          await sleep(300);
+        }
+      } catch (e) {
+        log.w(`Failed to re-open sidebar: ${e.message}`);
       }
     }
 
@@ -1029,18 +1087,34 @@
     if (item._fromSharedMedia && item._msgId) {
       const peerId = getPeerId();
       if (peerId) {
+        // Pre-download duplicate check: get real filename from metadata BEFORE downloading
+        if (S._bulkExistingFiles) {
+          try {
+            const meta = await getMetadata(item._msgId, peerId);
+            if (meta?.fileName) {
+              const metaKey = nameKey(meta.fileName);
+              if (S._bulkExistingFiles.has(metaKey)) {
+                log.i(`⏭ Skipped (metadata pre-check): ${meta.fileName}`);
+                return { success: true, realFileName: meta.fileName, skipped: true };
+              }
+            }
+            // Skip files larger than user-configured max size
+            if (S.maxFileSizeMB > 0 && meta?.size) {
+              const maxBytes = S.maxFileSizeMB * 1024 * 1024;
+              if (meta.size > maxBytes) {
+                const sizeMB = (meta.size / 1048576).toFixed(0);
+                log.w(`⏭ Skipped (too large: ${sizeMB} MB, max ${S.maxFileSizeMB} MB): ${meta?.fileName || name}`);
+                return { success: true, realFileName: meta?.fileName || name, skipped: true };
+              }
+            }
+          } catch (_) { /* metadata check failed, proceed with download */ }
+        }
+
         try {
           const isVideo = type === "video" || type === "gif";
-          const result = await downloadViaAPI(item._msgId, peerId, isVideo, 180000);
+          const result = await downloadViaAPI(item._msgId, peerId, isVideo, 90000);
           if (result?.blobUrl) {
             const realName = result.fileName || name;
-            // Check if the REAL filename is a duplicate before fetching the blob
-            const realKey = nameKey(realName);
-            if (S._bulkExistingFiles && S._bulkExistingFiles.has(realKey)) {
-              log.i(`⏭ Skipped (duplicate after API): ${realName}`);
-              revokeInjectedUrl(result.blobUrl);
-              return { success: true, realFileName: realName, skipped: true };
-            }
             const blob = await (await fetch(result.blobUrl)).blob();
             await downloadBlob(blob, realName);
             revokeInjectedUrl(result.blobUrl);
@@ -1055,7 +1129,17 @@
 
     // ── Strategy 2: Shared Media viewers (fallback) ──
     if (item._fromSharedMedia) {
+      if (S._viewerConsecFails >= 3) {
+        log.w(`⏭ Skipped viewer fallback (${S._viewerConsecFails} consecutive failures): ${name}`);
+        return { success: false, realFileName: null };
+      }
       const result = await downloadViaMediaViewer(item);
+      const ok = typeof result === "object" ? result.success : !!result;
+      if (ok) {
+        S._viewerConsecFails = 0;
+      } else {
+        S._viewerConsecFails = (S._viewerConsecFails || 0) + 1;
+      }
       if (typeof result === "object") return result;
       return { success: !!result, realFileName: null };
     }
@@ -1506,7 +1590,7 @@
       log.i(`Scroll container found: ${scrollContainer.className} (Height: ${scrollContainer.clientHeight}, ScrollHeight: ${scrollContainer.scrollHeight})`);
 
       // Scan Media tab
-      const mediaTabTypes = ["media", "files", "voice"];
+      const mediaTabTypes = ["media"];
       for (const tabType of mediaTabTypes) {
         if (signal?.aborted) break;
 
@@ -1989,9 +2073,16 @@
       toastEl.className = "tg-grab-toast";
       document.body.appendChild(toastEl);
     }
+    // Use a content wrapper so appended children (buttons) survive updates
+    let contentDiv = toastEl.querySelector(".tg-grab-toast-content");
+    if (!contentDiv) {
+      contentDiv = document.createElement("div");
+      contentDiv.className = "tg-grab-toast-content";
+      toastEl.insertBefore(contentDiv, toastEl.firstChild);
+    }
     const isScanning = total === 0 || total === null;
     const pct = !isScanning && total > 0 ? Math.round((current / total) * 100) : 0;
-    toastEl.innerHTML = `
+    contentDiv.innerHTML = `
       <div class="tg-grab-toast-title"><span>${isScanning ? "🔍" : "⬇"}</span><span>${title}</span></div>
       ${!isScanning ? `<div class="tg-grab-toast-bar"><div class="tg-grab-toast-fill" style="width:${pct}%"></div></div>` : ""}
       <div class="tg-grab-toast-info"><span>${isScanning ? `${current} encontrados` : `${current} / ${total}`}</span><span>${isScanning ? "..." : `${pct}%`}</span></div>
@@ -2135,10 +2226,265 @@
           case "scan":
             sendResponse(scanVisible());
             break;
-          case "bulkDownload":
-            bulkDownload(msg.types || ["photos", "videos", "gifs", "docs"], S.scannedMedia.length ? S.scannedMedia : null);
+          case "bulkDownload": {
+            // Synchronized: open sidebar → scan visible → download batch → scroll → repeat
+            if (S.downloading) { sendResponse({ started: false }); break; }
+            S.downloading = true;
+            const acDl = new AbortController();
+            S.abortController = acDl;
+            const dlTypes = msg.types || ["photos", "videos", "gifs"];
+            const typeMap = { photos: ["photo"], videos: ["video"], gifs: ["gif"], docs: ["doc"], audios: ["audio"] };
+            const allowed = dlTypes.flatMap(t => typeMap[t] || []);
+
+            // Progress state (accessible via getDownloadStatus)
+            S.dlProgress = { downloaded: 0, skipped: 0, totalFound: 0, active: true, fileName: "" };
+
+            showToast("⬇ Opening media...", 0, 0);
+            let skipAc = null; // per-item skip controller
+            if (toastEl) {
+              const btnRow = document.createElement("div");
+              btnRow.style.cssText = "display:flex;gap:6px;margin-top:4px;";
+
+              const skipBtn = document.createElement("button");
+              skipBtn.textContent = "⏭ Skip";
+              skipBtn.className = "tg-grab-toast-stop";
+              skipBtn.style.background = "#e67e22";
+              skipBtn.onclick = () => { if (skipAc) skipAc.abort(); };
+              btnRow.appendChild(skipBtn);
+
+              const stopBtn = document.createElement("button");
+              stopBtn.textContent = "⏹ Stop";
+              stopBtn.className = "tg-grab-toast-stop";
+              stopBtn.onclick = () => { acDl.abort(); if (skipAc) skipAc.abort(); };
+              btnRow.appendChild(stopBtn);
+
+              toastEl.appendChild(btnRow);
+            }
+
+            (async () => {
+              const P = S.dlProgress;
+              const seenMids = new Set();
+              const chatName = getChatName();
+
+              // Pre-fetch existing files for duplicate check
+              let existingFiles = new Set();
+              try {
+                const r = await new Promise(resolve => {
+                  chrome.runtime.sendMessage({ action: "getExistingFiles" }, res => resolve(res?.files || []));
+                });
+                existingFiles = new Set(r);
+                S._bulkExistingFiles = existingFiles; // Enable metadata pre-check in downloadItem
+                S._viewerConsecFails = 0; // Reset consecutive viewer failure counter
+                log.i(`Pre-scan: ${existingFiles.size} existing files`);
+              } catch (_) { }
+
+              // Step 1: Open sidebar (same logic as sharedMediaScan)
+              let searchSuper = document.querySelector(".search-super");
+              if (searchSuper && (searchSuper.offsetParent === null || searchSuper.clientHeight === 0)) searchSuper = null;
+              if (!searchSuper) {
+                const clickTargets = [".chat-info .content", ".chat-info .person", ".top .person",
+                  ".chat-info .peer-title", ".top .peer-title", ".chat-info .avatar-element"];
+                for (const sel of clickTargets) {
+                  const el = document.querySelector(sel);
+                  if (el && el.offsetParent !== null) { el.click(); await sleep(600); break; }
+                }
+                for (let i = 0; i < 25; i++) {
+                  if (acDl.signal.aborted) break;
+                  const el = document.querySelector(".search-super");
+                  if (el && el.offsetParent !== null && el.clientHeight > 0) { searchSuper = el; break; }
+                  const ps = document.querySelector("#column-right .scrollable.scrollable-y");
+                  if (ps && i === 5) ps.scrollTop = ps.scrollHeight;
+                  await sleep(300);
+                }
+              }
+              log.i(`[DL] searchSuper found: ${!!searchSuper}, aborted: ${acDl.signal.aborted}`);
+              if (!searchSuper || acDl.signal.aborted) {
+                log.w("Could not open sidebar for download");
+                showToast("❌ No pudo abrir la sidebar de media", 0, 0);
+                setTimeout(hideToast, 3000);
+                S.downloading = false; P.active = false; return;
+              }
+
+              // Step 2: Click Media tab
+              const nav = searchSuper.querySelector("nav.search-super-tabs");
+              const tabEls = nav ? nav.querySelectorAll(".menu-horizontal-div-item") : [];
+              let mediaTab = null;
+              tabEls.forEach(t => {
+                const label = (t.textContent || "").trim().toLowerCase();
+                if (label.includes("media") || label.includes("foto") || label.includes("photo")) mediaTab = t;
+              });
+              log.i(`[DL] Media tab: ${mediaTab ? 'found' : 'NOT FOUND'}, active: ${mediaTab?.classList?.contains('active')}`);
+              if (mediaTab && !mediaTab.classList.contains("active")) { mediaTab.click(); await sleep(800); }
+
+              // Step 3: Find scroll container (same strategy as sharedMediaScan)
+              let scrollContainer = document.querySelector("#column-right .sidebar-content > .scrollable.scrollable-y");
+              if (!scrollContainer || scrollContainer.clientHeight === 0) {
+                scrollContainer = null;
+                let p = searchSuper.parentElement;
+                while (p && p !== document.body) {
+                  const style = window.getComputedStyle(p);
+                  if ((style.overflowY === "auto" || style.overflowY === "scroll") && p.clientHeight > 0) {
+                    scrollContainer = p; break;
+                  }
+                  p = p.parentElement;
+                }
+              }
+              log.i(`[DL] Scroll container: ${scrollContainer ? scrollContainer.className + ` (H:${scrollContainer.clientHeight} SH:${scrollContainer.scrollHeight})` : "NOT FOUND"}`);
+
+              // Helper: scan visible grid items, return new ones
+              function scanNewItems() {
+                const items = [];
+                searchSuper.querySelectorAll(".grid-item.search-super-item[data-mid]").forEach(el => {
+                  const mid = el.dataset.mid;
+                  if (!mid || seenMids.has(mid)) return;
+                  seenMids.add(mid);
+                  let type = "photo", name = "";
+                  const vt = el.querySelector("span.video-time");
+                  if (vt) {
+                    const dur = (vt.textContent || "").trim();
+                    if (dur === "GIF" || el.querySelector(".gif-badge")) { type = "gif"; name = `gif_${mid}.mp4`; }
+                    else { type = "video"; name = `video_${mid}${dur ? "_" + dur.replace(/:/g, "m") : ""}.mp4`; }
+                  }
+                  if (type === "photo") name = `photo_${mid}.jpg`;
+                  if (allowed.includes(type)) items.push({ type, name, _msgId: mid, _fromSharedMedia: true, el, unloaded: type !== "photo" });
+                });
+                return items;
+              }
+
+              // Peek: check for unseen items WITHOUT consuming them
+              function hasNewItems() {
+                let count = 0;
+                searchSuper.querySelectorAll(".grid-item.search-super-item[data-mid]").forEach(el => {
+                  const mid = el.dataset.mid;
+                  if (mid && !seenMids.has(mid)) count++;
+                });
+                return count > 0;
+              }
+
+              // Step 4: Scroll to top and start synchronized download loop
+              if (scrollContainer) {
+                log.i(`[DL] Scrolling to top from ${scrollContainer.scrollTop}`);
+                scrollContainer.scrollTop = 0;
+                await sleep(600);
+                log.i(`[DL] After scroll-to-top: scrollTop=${scrollContainer.scrollTop}`);
+              } else {
+                log.w(`[DL] No scrollContainer, will scan visible only`);
+              }
+              let scrollAttempts = 0, staleRounds = 0;
+              const MAX_STALE = 20;
+              let lastScrollTop = -1, lastScrollHeight = scrollContainer ? scrollContainer.scrollHeight : 0;
+
+              while (scrollAttempts < 500 && staleRounds < MAX_STALE && !acDl.signal.aborted) {
+                // Scan visible items
+                const batch = scanNewItems();
+                P.totalFound += batch.length;
+                log.i(`[DL] Iter ${scrollAttempts}: batch=${batch.length}, total=${P.totalFound}, stale=${staleRounds}`);
+
+                // Download each item in this batch BEFORE scrolling
+                for (const item of batch) {
+                  if (acDl.signal.aborted) break;
+                  P.fileName = item.name;
+                  const key = nameKey(item.name);
+
+                  if (existingFiles.has(key)) { P.skipped++; log.i(`⏭ Skip: ${item.name}`); continue; }
+                  if (item._msgId && chatName && S.downloadedMids.has(`${chatName}:${item._msgId}`)) { P.skipped++; continue; }
+
+                  try {
+                    // Create per-item skip controller
+                    skipAc = new AbortController();
+                    const skipPromise = new Promise((_, reject) => {
+                      skipAc.signal.addEventListener("abort", () => reject(new Error("__SKIPPED__")));
+                    });
+                    showToast(`⬇ ${P.downloaded}/${P.totalFound} — ${item.name}`, P.downloaded + P.skipped, P.totalFound);
+                    try { chrome.runtime.sendMessage({ action: "downloadProgress", current: P.downloaded + P.skipped, total: P.totalFound, fileName: item.name }); } catch (_) { }
+                    const result = await Promise.race([downloadItem(item), skipPromise]);
+                    skipAc = null;
+                    P.downloaded++;
+                    existingFiles.add(key);
+                    if (item._msgId && chatName) S.downloadedMids.add(`${chatName}:${item._msgId}`);
+                    // Track real filename from API result too
+                    if (result?.realFileName) existingFiles.add(nameKey(result.realFileName));
+                  } catch (e) {
+                    skipAc = null;
+                    if (e.message === "__SKIPPED__") {
+                      P.skipped++;
+                      log.i(`⏭ User skipped: ${item.name}`);
+                      // Cancel any active download (SW/API) in injected.js
+                      cancelActiveDownload();
+                      // Close any open media viewer from fallback
+                      const viewer = document.querySelector(".media-viewer-whole");
+                      if (viewer) {
+                        const closeBtn = viewer.querySelector(".btn-icon.media-viewer-close");
+                        if (closeBtn) closeBtn.click();
+                      }
+                    } else {
+                      log.w(`DL fail: ${item.name}: ${e.message}`);
+                    }
+                  }
+
+                  showToast(`⬇ ${P.downloaded}/${P.totalFound}${P.skipped ? ` · ${P.skipped} dup` : ""}`, P.downloaded + P.skipped, P.totalFound);
+                  try { chrome.runtime.sendMessage({ action: "downloadProgress", current: P.downloaded + P.skipped, total: P.totalFound, fileName: item.name }); } catch (_) { }
+                }
+
+                if (!scrollContainer || acDl.signal.aborted) break;
+
+                // Check if sidebar/searchSuper still exists in DOM
+                if (!document.contains(searchSuper) || !document.contains(scrollContainer)) {
+                  log.w("[DL] Sidebar/searchSuper disappeared from DOM, stopping.");
+                  break;
+                }
+
+                // NOW scroll for more
+                const prevCount = seenMids.size;
+                lastScrollTop = scrollContainer.scrollTop;
+                scrollContainer.scrollTop += scrollContainer.clientHeight * 0.8;
+                await sleep(600);
+
+                const scrollMoved = Math.abs(scrollContainer.scrollTop - lastScrollTop) >= 2;
+                if (!scrollMoved) {
+                  // Scroll didn't move — wait for lazy loading / preloader
+                  let loaded = false;
+                  for (let w = 0; w < 15; w++) {
+                    await sleep(500);
+                    const loader = searchSuper.querySelector(".preloader-container:not(.hide), .loader");
+                    if (loader) { staleRounds = Math.max(0, staleRounds - 1); continue; } // still loading, be patient
+                    if (scrollContainer.scrollHeight > lastScrollHeight + 10) { loaded = true; break; }
+                    if (hasNewItems()) { loaded = true; break; }
+                  }
+                  if (loaded) { lastScrollHeight = scrollContainer.scrollHeight; staleRounds = 0; }
+                  else { staleRounds++; }
+                } else {
+                  for (let p = 0; p < 5; p++) { await sleep(400); if (hasNewItems()) break; }
+                  if (scrollContainer.scrollHeight > lastScrollHeight + 10) { lastScrollHeight = scrollContainer.scrollHeight; staleRounds = Math.max(0, staleRounds - 1); }
+                  if (seenMids.size === prevCount) staleRounds++; else staleRounds = 0;
+                }
+                scrollAttempts++;
+                if (scrollAttempts <= 3 || scrollAttempts % 5 === 0)
+                  log.i(`[DL] Loop ${scrollAttempts}: ${seenMids.size} found, ${P.downloaded} dl, ${P.skipped} skip`);
+              }
+
+              // Done
+              log.i(`[DL] DONE: downloaded=${P.downloaded}, skipped=${P.skipped}, total=${P.totalFound}, loops=${scrollAttempts}`);
+              S.downloading = false; P.active = false; S._bulkExistingFiles = null; S._viewerConsecFails = 0;
+              hideToast();
+              showToast(`✅ Listo: ${P.downloaded} descargados${P.skipped ? `, ${P.skipped} omitidos` : ""}`, 0, 0);
+              setTimeout(hideToast, 5000);
+              try { chrome.runtime.sendMessage({ action: "downloadComplete", total: P.downloaded + P.skipped, skipped: P.skipped }); } catch (_) { }
+              _saveMids();
+            })();
+
             sendResponse({ started: true });
             break;
+          }
+          case "getDownloadStatus": {
+            const p = S.dlProgress;
+            if (p && p.active) {
+              sendResponse({ active: true, downloaded: p.downloaded, skipped: p.skipped, total: p.totalFound, fileName: p.fileName });
+            } else {
+              sendResponse({ active: false });
+            }
+            break;
+          }
           case "autoScrollScan": {
             const ac = new AbortController();
             S.abortController = ac;
@@ -2189,41 +2535,113 @@
             break;
           }
           case "scanAll": {
-            const ac3 = new AbortController();
-            S.abortController = ac3;
-            showToast("Scanning all media...", 0, 0);
-            if (toastEl) {
-              const stopBtn = document.createElement("button");
-              stopBtn.textContent = "⏹ Stop";
-              stopBtn.className = "tg-grab-toast-stop";
-              stopBtn.onclick = () => { ac3.abort(); };
-              toastEl.appendChild(stopBtn);
-            }
-            autoScrollScan(
-              (item, count) => {
-                showToast(`Scanning... ${count} found`, count, 0);
-                try { chrome.runtime.sendMessage({ action: "scanProgress", count: count }); } catch (_) { }
-              },
-              null, ac3.signal
-            ).then((media) => {
-              hideToast();
-              S.scannedMedia = media;
-              // Calculate counts
-              const counts = { photos: 0, videos: 0, gifs: 0, docs: 0, audios: 0 };
-              media.forEach(m => {
-                if (m.type === "photo") counts.photos++;
-                else if (m.type === "video") counts.videos++;
-                else if (m.type === "gif") counts.gifs++;
-                else if (m.type === "doc") counts.docs++;
-                else if (m.type === "audio") counts.audios++;
+            const forceRescan = msg.force === true;
+            const currentPeerId = getPeerId();
+
+            // Helper to run the actual scan
+            function doFullScan() {
+              const ac3 = new AbortController();
+              S.abortController = ac3;
+              showToast("Scanning all media...", 0, 0);
+              if (toastEl) {
+                const stopBtn = document.createElement("button");
+                stopBtn.textContent = "⏹ Stop";
+                stopBtn.className = "tg-grab-toast-stop";
+                stopBtn.onclick = () => { ac3.abort(); };
+                toastEl.appendChild(stopBtn);
+              }
+              autoScrollScan(
+                (item, count) => {
+                  showToast(`Scanning... ${count} found`, count, 0);
+                  try { chrome.runtime.sendMessage({ action: "scanProgress", count: count }); } catch (_) { }
+                },
+                null, ac3.signal
+              ).then((media) => {
+                hideToast();
+                S.scannedMedia = media;
+                const counts = { photos: 0, videos: 0, gifs: 0, docs: 0, audios: 0 };
+                media.forEach(m => {
+                  if (m.type === "photo") counts.photos++;
+                  else if (m.type === "video") counts.videos++;
+                  else if (m.type === "gif") counts.gifs++;
+                  else if (m.type === "doc") counts.docs++;
+                  else if (m.type === "audio") counts.audios++;
+                });
+                try { chrome.runtime.sendMessage({ action: "scanComplete", count: media.length, counts: counts }); } catch (_) { }
+                updateBadge(media.length);
+                showToast(`✅ Scan complete: ${media.length} files`, 0, 0);
+                setTimeout(hideToast, 3000);
+
+                // Save scan results to cache (only if same or more items than existing cache)
+                if (currentPeerId && media.length > 0) {
+                  const cacheKey = `scanCache_${currentPeerId}`;
+                  chrome.storage.local.get(cacheKey, (existing) => {
+                    const oldCount = existing[cacheKey]?.media?.length || 0;
+                    // Don't overwrite a larger cache with a smaller scan (partial scan protection)
+                    if (oldCount > 0 && media.length < oldCount * 0.8) {
+                      log.i(`Scan NOT cached: ${media.length} items < 80% of existing ${oldCount} items`);
+                      return;
+                    }
+                    const serializable = media.map(m => ({
+                      name: m.name, type: m.type, _msgId: m._msgId,
+                      _fromSharedMedia: true,
+                      thumb: (m.thumb && m.thumb.startsWith("http")) ? m.thumb : null,
+                    }));
+                    chrome.storage.local.set({ [cacheKey]: { media: serializable, timestamp: Date.now(), peerId: currentPeerId } });
+                    log.i(`Scan cached: ${media.length} items for peer ${currentPeerId}`);
+                  });
+                }
               });
-              try { chrome.runtime.sendMessage({ action: "scanComplete", count: media.length, counts: counts }); } catch (_) { }
-              updateBadge(media.length);
-              showToast(`✅ Scan complete: ${media.length} files`, 0, 0);
-              setTimeout(hideToast, 3000);
-            });
+            }
+
+            // Check cache first (unless force re-scan)
+            if (!forceRescan && currentPeerId) {
+              const cacheKey = `scanCache_${currentPeerId}`;
+              chrome.storage.local.get(cacheKey, (data) => {
+                const cached = data[cacheKey];
+                if (cached && cached.media && cached.media.length > 0) {
+                  S.scannedMedia = cached.media.map(m => ({
+                    ...m,
+                    _fromSharedMedia: true,
+                    thumb: (m.thumb && (m.thumb.startsWith("data:") || m.thumb.startsWith("http"))) ? m.thumb : null,
+                  }));
+                  const counts = { photos: 0, videos: 0, gifs: 0, docs: 0, audios: 0 };
+                  S.scannedMedia.forEach(m => {
+                    if (m.type === "photo") counts.photos++;
+                    else if (m.type === "video") counts.videos++;
+                    else if (m.type === "gif") counts.gifs++;
+                  });
+                  const ago = Math.round((Date.now() - cached.timestamp) / 60000);
+                  const agoText = ago < 1 ? "just now" : `${ago}m ago`;
+                  try { chrome.runtime.sendMessage({ action: "scanComplete", count: S.scannedMedia.length, counts, fromCache: true }); } catch (_) { }
+                  updateBadge(S.scannedMedia.length);
+                  showToast(`📦 Restored ${S.scannedMedia.length} items from cache (${agoText})`, 0, 0);
+                  log.i(`Scan cache restored: ${S.scannedMedia.length} items for peer ${currentPeerId} (${agoText})`);
+                  setTimeout(hideToast, 3000);
+                } else {
+                  doFullScan();
+                }
+              });
+            } else {
+              doFullScan();
+            }
             sendResponse({ started: true });
             break;
+          }
+          case "getCachedScan": {
+            const pid = getPeerId();
+            if (!pid) { sendResponse({ cached: false }); break; }
+            const ck = `scanCache_${pid}`;
+            chrome.storage.local.get(ck, (data) => {
+              const cached = data[ck];
+              if (cached && cached.media && cached.media.length > 0) {
+                const ago = Math.round((Date.now() - cached.timestamp) / 60000);
+                sendResponse({ cached: true, count: cached.media.length, agoMinutes: ago });
+              } else {
+                sendResponse({ cached: false });
+              }
+            });
+            return true; // async sendResponse
           }
           case "updateSettings":
             if (msg.buttonsEnabled !== undefined) {
@@ -2239,11 +2657,13 @@
             }
             if (msg.restrictedEnabled !== undefined) S.restrictedEnabled = msg.restrictedEnabled;
             if (msg.folderName) S.folderName = msg.folderName;
+            if (msg.maxFileSizeMB !== undefined) S.maxFileSizeMB = msg.maxFileSizeMB;
             if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
               chrome.storage.local.set({
                 buttonsEnabled: S.buttonsEnabled,
                 restrictedEnabled: S.restrictedEnabled,
                 folderName: S.folderName,
+                maxFileSizeMB: S.maxFileSizeMB,
               });
             }
             sendResponse({ ok: true });
@@ -2518,7 +2938,29 @@
 
       const wait = setInterval(() => {
         const chat = document.querySelector(SEL[v].chatContainer);
-        if (chat) { clearInterval(wait); startObserver(); }
+        if (chat) {
+          clearInterval(wait);
+          startObserver();
+          // Auto-restore scan cache for current chat
+          const pid = getPeerId();
+          if (pid) {
+            const ck = `scanCache_${pid}`;
+            chrome.storage.local.get(ck, (data) => {
+              const cached = data[ck];
+              if (cached && cached.media && cached.media.length > 0 && S.scannedMedia.length === 0) {
+                S.scannedMedia = cached.media.map(m => ({
+                  ...m,
+                  _fromSharedMedia: true,
+                  // Strip invalid thumbs (blob: URLs die after reload, only keep data: or http:)
+                  thumb: (m.thumb && (m.thumb.startsWith("data:") || m.thumb.startsWith("http"))) ? m.thumb : null,
+                }));
+                updateBadge(S.scannedMedia.length);
+                const ago = Math.round((Date.now() - cached.timestamp) / 60000);
+                log.i(`Auto-restored scan cache: ${S.scannedMedia.length} items (${ago}m ago)`);
+              }
+            });
+          }
+        }
       }, 1000);
 
       log.i("TG Media Grabber Pro v2 ready ✓");
@@ -2526,12 +2968,13 @@
 
     // Protect against chrome API not being available
     if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.get(["buttonsEnabled", "restrictedEnabled", "folderName", "downloadHistory", "downloadedMids"], (data) => {
+      chrome.storage.local.get(["buttonsEnabled", "restrictedEnabled", "folderName", "maxFileSizeMB", "downloadHistory", "downloadedMids"], (data) => {
         if (chrome.runtime.lastError) { log.w("Storage read error, using defaults"); }
         else {
           if (data.buttonsEnabled === false) S.buttonsEnabled = false;
           if (data.restrictedEnabled === false) S.restrictedEnabled = false;
           if (data.folderName) S.folderName = data.folderName;
+          if (data.maxFileSizeMB !== undefined) S.maxFileSizeMB = data.maxFileSizeMB;
           if (Array.isArray(data.downloadHistory)) S.downloadHistory = data.downloadHistory;
           if (Array.isArray(data.downloadedMids)) S.downloadedMids = new Set(data.downloadedMids);
         }

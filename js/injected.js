@@ -199,7 +199,10 @@
     return null;
   }
 
-  async function downloadViaSW(streamUrl, onProgress) {
+  // Track active downloads for cancellation
+  const _activeDownloads = new Map();
+
+  async function downloadViaSW(streamUrl, onProgress, signal) {
     const meta = parseStreamUrl(streamUrl);
     const fileName = meta?.fileName || "video.mp4";
     const mimeType = meta?.mimeType || "video/mp4";
@@ -224,9 +227,10 @@
       const chunkDelay = totalSize > 50 * 1048576 ? 150 : totalSize > 5 * 1048576 ? 50 : 0;
 
       while (offset < totalSize) {
+        if (signal?.aborted) throw new Error("__CANCELLED__");
         const end = Math.min(offset + CHUNK - 1, totalSize - 1);
         try {
-          const resp = await fetch(streamUrl, { headers: { Range: `bytes=${offset}-${end}` } });
+          const resp = await fetch(streamUrl, { headers: { Range: `bytes=${offset}-${end}` }, signal });
           if (!resp.ok && resp.status !== 206) {
             failures++;
             if (failures > MAX_RETRIES) throw new Error(`HTTP ${resp.status} after ${failures} retries`);
@@ -240,6 +244,7 @@
           if (onProgress) onProgress(Math.round((offset / totalSize) * 100), offset, totalSize);
           if (chunkDelay > 0 && offset < totalSize) await new Promise(r => setTimeout(r, chunkDelay));
         } catch (e) {
+          if (signal?.aborted) throw new Error("__CANCELLED__");
           failures++;
           if (failures > MAX_RETRIES) throw e;
           const backoff = Math.min(3000 * Math.pow(2, failures - 1), 60000);
@@ -252,7 +257,7 @@
     }
 
     // Single full fetch (small files / unknown size)
-    const resp = await fetch(streamUrl);
+    const resp = await fetch(streamUrl, { signal });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const blob = await resp.blob();
     if (blob.size < 100) throw new Error("Empty response");
@@ -295,24 +300,35 @@
     // SW-based download (fallback strategy)
     if (data?.type === "TG_GRABBER_DOWNLOAD_REQUEST") {
       const { streamUrl, requestId } = data;
+      const ac = new AbortController();
+      _activeDownloads.set(requestId, ac);
       try {
         const result = await downloadViaSW(streamUrl, (pct, received, total) => {
           window.postMessage({
             type: "TG_GRABBER_DOWNLOAD_PROGRESS",
             requestId, pct, received, total,
           }, "*");
-        });
+        }, ac.signal);
         window.postMessage({
           type: "TG_GRABBER_DOWNLOAD_COMPLETE",
           requestId, ...result,
         }, "*");
       } catch (e) {
-        console.error(`${LOG} SW Download error:`, e);
+        if (e.message !== "__CANCELLED__") console.error(`${LOG} SW Download error:`, e);
         window.postMessage({
-          type: "TG_GRABBER_DOWNLOAD_ERROR",
+          type: e.message === "__CANCELLED__" ? "TG_GRABBER_DOWNLOAD_CANCELLED" : "TG_GRABBER_DOWNLOAD_ERROR",
           requestId, error: e.message,
         }, "*");
+      } finally {
+        _activeDownloads.delete(requestId);
       }
+    }
+
+    // Cancel an in-progress download
+    if (data?.type === "TG_GRABBER_CANCEL_DOWNLOAD") {
+      const { requestId } = data;
+      const ac = _activeDownloads.get(requestId);
+      if (ac) { ac.abort(); _activeDownloads.delete(requestId); }
     }
 
     // Check API status

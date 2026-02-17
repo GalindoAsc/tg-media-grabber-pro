@@ -1,0 +1,64 @@
+{
+  "manifest_version": 3,
+  "name": "TG Media Grabber Pro",
+  "version": "3.4.0",
+  "description": "Descarga fotos, videos, GIFs, audios y documentos de Telegram Web (K y A). Auto-scroll, galería preview, descarga masiva, contenido restringido.",
+  "permissions": [
+    "activeTab",
+    "downloads",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://web.telegram.org/*",
+    "https://webk.telegram.org/*",
+    "https://webz.telegram.org/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://web.telegram.org/*",
+        "https://webk.telegram.org/*",
+        "https://webz.telegram.org/*"
+      ],
+      "js": ["js/content.js"],
+      "css": ["css/styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "js/background.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["js/injected.js"],
+      "matches": [
+        "https://web.telegram.org/*",
+        "https://webk.telegram.org/*",
+        "https://webz.telegram.org/*"
+      ]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "commands": {
+    "download-current": {
+      "suggested_key": { "default": "Ctrl+Shift+D" },
+      "description": "Descargar media actual"
+    },
+    "open-gallery": {
+      "suggested_key": { "default": "Ctrl+Shift+G" },
+      "description": "Abrir galería de preview"
+    }
+  }
+}

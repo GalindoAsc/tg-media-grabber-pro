@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+    :root {
+      --bg0:#0a0a0f; --bg1:#0f0f18; --bg2:#161622; --bg3:#1e1e2e;
+      --accent:#00e5b8; --accentSoft:#00e5b822; --accentMed:#00e5b844; --accentGlow:#00e5b866;
+      --purple:#8b5cf6; --purpleSoft:#8b5cf622; --purpleGlow:#8b5cf644;
+      --txt:#eeeef5; --txt2:#9090aa; --txt3:#555570;
+      --border:#1a1a2e; --r:12px;
+      --red:#ff4d6a; --orange:#ff9f43; --blue:#3b82f6;
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{width:400px;background:var(--bg0);color:var(--txt);font-family:'Outfit',sans-serif;overflow-x:hidden}
+
+    /* ─── Header ─── */
+    .hdr{position:relative;padding:20px 22px 16px;background:linear-gradient(160deg,var(--bg1) 0%,#0d0d1a 100%);overflow:hidden}
+    .hdr::before{content:'';position:absolute;top:-60px;right:-30px;width:160px;height:160px;background:radial-gradient(circle,var(--accentSoft) 0%,transparent 70%);pointer-events:none}
+    .hdr::after{content:'';position:absolute;bottom:-40px;left:30px;width:100px;height:100px;background:radial-gradient(circle,var(--purpleSoft) 0%,transparent 70%);pointer-events:none}
+    .hdr-top{display:flex;align-items:center;gap:14px;position:relative;z-index:1}
+    .logo{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#00b89c);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px var(--accentSoft);position:relative}
+    .logo svg{width:20px;height:20px;fill:var(--bg0)}
+    .logo::after{content:'';position:absolute;inset:-2px;border-radius:14px;background:linear-gradient(135deg,var(--accent),var(--purple));z-index:-1;opacity:.4;filter:blur(4px)}
+    .hdr-info h1{font-size:15px;font-weight:700;letter-spacing:-.4px;background:linear-gradient(135deg,var(--txt),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .hdr-info p{font-size:11px;color:var(--txt3);margin-top:1px;font-weight:400}
+    .ver-badge{position:absolute;right:22px;top:22px;font-size:9px;font-weight:600;font-family:'JetBrains Mono',monospace;color:var(--accent);background:var(--accentSoft);padding:3px 8px;border-radius:20px;z-index:1;border:1px solid var(--accentMed)}
+
+    /* ─── Status Bar ─── */
+    .status-bar{display:flex;align-items:center;gap:10px;padding:10px 22px;background:var(--bg1);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+    .status-dot{width:8px;height:8px;border-radius:50%;background:var(--txt3);transition:all .4s;flex-shrink:0}
+    .status-dot.on{background:var(--accent);box-shadow:0 0 10px var(--accentGlow);animation:statusPulse 2.5s ease infinite}
+    @keyframes statusPulse{0%,100%{box-shadow:0 0 6px var(--accentGlow)}50%{box-shadow:0 0 14px var(--accentGlow)}}
+    .status-bar span{font-size:11px;color:var(--txt2);font-family:'JetBrains Mono',monospace;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+    /* ─── Content ─── */
+    .content{padding:16px 22px 8px}
+
+    /* Section labels */
+    .sec-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--txt3);margin-bottom:10px;margin-top:16px;display:flex;align-items:center;gap:6px}
+    .sec-label:first-child{margin-top:0}
+    .sec-label::after{content:'';flex:1;height:1px;background:var(--border)}
+
+    /* ─── Media Type Cards ─── */
+    .type-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .type-card{background:var(--bg2);border:1.5px solid var(--border);border-radius:var(--r);padding:12px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+    .type-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent,var(--accentSoft));opacity:0;transition:opacity .2s}
+    .type-card:hover{border-color:var(--accentMed);transform:translateY(-1px)}
+    .type-card:hover::before{opacity:1}
+    .type-card.sel{border-color:var(--accent);background:linear-gradient(135deg,var(--accentSoft),var(--bg2))}
+    .type-card .tc-row{display:flex;align-items:center;gap:9px;position:relative;z-index:1}
+    .type-card .tc-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+    .type-card[data-type="photos"] .tc-icon{background:linear-gradient(135deg,#3b82f6,#60a5fa)}
+    .type-card[data-type="videos"] .tc-icon{background:linear-gradient(135deg,#f43f5e,#fb7185)}
+    .type-card[data-type="gifs"] .tc-icon{background:linear-gradient(135deg,#f59e0b,#fbbf24)}
+    .type-card[data-type="docs"] .tc-icon{background:linear-gradient(135deg,#8b5cf6,#a78bfa)}
+    .type-card .tc-label{font-size:12px;font-weight:600;line-height:1.2}
+    .type-card .tc-count{font-size:10px;color:var(--txt3);font-family:'JetBrains Mono',monospace;font-weight:400}
+    .tc-check{position:absolute;top:8px;right:8px;width:18px;height:18px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;z-index:1;transition:all .2s}
+    .type-card.sel .tc-check{background:var(--accent);border-color:var(--accent)}
+    .tc-check svg{width:10px;height:10px;fill:var(--bg0);opacity:0;transition:opacity .2s}
+    .type-card.sel .tc-check svg{opacity:1}
+
+    /* ─── Action Buttons ─── */
+    .actions{display:flex;flex-direction:column;gap:8px}
+    .btn{width:100%;padding:12px 16px;border-radius:var(--r);font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .2s;letter-spacing:.1px;display:flex;align-items:center;justify-content:center;gap:8px;position:relative;overflow:hidden}
+    .btn:disabled{opacity:.3;cursor:not-allowed;transform:none!important;box-shadow:none!important}
+    .btn:active:not(:disabled){transform:scale(.98)}
+
+    .btn-gallery{background:linear-gradient(135deg,var(--purple),#a855f7);color:#fff;box-shadow:0 4px 16px var(--purpleSoft)}
+    .btn-gallery:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 24px var(--purpleGlow)}
+    .btn-gallery::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent,rgba(255,255,255,.1));opacity:0;transition:opacity .2s}
+    .btn-gallery:hover::before{opacity:1}
+
+    .btn-primary{background:linear-gradient(135deg,var(--accent),#00c9a0);color:var(--bg0);box-shadow:0 4px 16px var(--accentSoft)}
+    .btn-primary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 24px var(--accentGlow)}
+
+    .btn-outline{background:transparent;color:var(--txt2);border:1.5px solid var(--border)}
+    .btn-outline:hover:not(:disabled){border-color:var(--accentMed);color:var(--txt);background:var(--accentSoft)}
+
+    .btn .btn-icon{font-size:15px}
+    .btn .btn-spin{display:none;width:14px;height:14px;border:2px solid transparent;border-top-color:currentColor;border-radius:50%;animation:spin .8s linear infinite}
+    .btn.loading .btn-spin{display:inline-block}
+    .btn.loading .btn-icon{display:none}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* ─── Settings ─── */
+    .settings{display:flex;flex-direction:column;gap:0}
+    .srow{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
+    .srow:last-child{border:none}
+    .srow label{font-size:12px;color:var(--txt2);font-weight:400}
+    .srow input{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--txt);background:var(--bg2);padding:5px 10px;border-radius:8px;border:1.5px solid var(--border);outline:none;width:120px;transition:border-color .2s}
+    .srow input:focus{border-color:var(--accent)}
+    .toggle{width:38px;height:20px;background:var(--bg3);border-radius:10px;cursor:pointer;position:relative;transition:background .3s;flex-shrink:0}
+    .toggle.on{background:var(--accent)}
+    .toggle::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;background:#fff;border-radius:50%;transition:all .3s;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+    .toggle.on::after{left:20px}
+
+    /* ─── Progress ─── */
+    .prog{display:none;margin-top:12px;background:var(--bg2);border-radius:var(--r);padding:12px;border:1px solid var(--border)}
+    .prog.on{display:block;animation:fadeIn .3s ease}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+    .prog-bar{width:100%;height:4px;background:var(--bg0);border-radius:2px;overflow:hidden;margin-bottom:8px}
+    .prog-fill{height:100%;background:linear-gradient(90deg,var(--accent),#00eebb);border-radius:2px;width:0%;transition:width .4s ease}
+    .prog-row{display:flex;justify-content:space-between;font-size:10px;color:var(--txt3);font-family:'JetBrains Mono',monospace}
+
+    /* ─── Shortcuts ─── */
+    .shortcuts{display:flex;flex-direction:column;gap:6px;padding-bottom:4px}
+    .sc-row{display:flex;align-items:center;justify-content:space-between}
+    .sc-row label{font-size:11px;color:var(--txt3);font-weight:400}
+    .kbd{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--txt2);background:var(--bg2);padding:3px 8px;border-radius:6px;border:1px solid var(--border);font-weight:500}
+
+    /* ─── Footer ─── */
+    .ftr{padding:12px 22px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+    .ftr p{font-size:9px;color:var(--txt3);font-family:'JetBrains Mono',monospace}
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="hdr">
+    <div class="hdr-top">
+      <div class="logo">
+        <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+      </div>
+      <div class="hdr-info">
+        <h1>TG Media Grabber</h1>
+        <p>Descarga multimedia de Telegram Web</p>
+      </div>
+    </div>
+    <span class="ver-badge" id="verBadge">v3.1</span>
+  </div>
+
+  <!-- Status -->
+  <div class="status-bar">
+    <div class="status-dot" id="dot"></div>
+    <span id="statusTxt">Conectando con Telegram Web…</span>
+  </div>
+
+  <div class="content">
+    <!-- Media Types -->
+    <div class="sec-label">Tipo de media</div>
+    <div class="type-grid">
+      <div class="type-card sel" data-type="photos">
+        <div class="tc-check"><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+        <div class="tc-row">
+          <div class="tc-icon">📸</div>
+          <div><div class="tc-label">Fotos</div><div class="tc-count" id="cPhotos">—</div></div>
+        </div>
+      </div>
+      <div class="type-card sel" data-type="videos">
+        <div class="tc-check"><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+        <div class="tc-row">
+          <div class="tc-icon">🎬</div>
+          <div><div class="tc-label">Videos</div><div class="tc-count" id="cVideos">—</div></div>
+        </div>
+      </div>
+      <div class="type-card sel" data-type="gifs">
+        <div class="tc-check"><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+        <div class="tc-row">
+          <div class="tc-icon">🎭</div>
+          <div><div class="tc-label">GIFs</div><div class="tc-count" id="cGifs">—</div></div>
+        </div>
+      </div>
+      <div class="type-card sel" data-type="docs">
+        <div class="tc-check"><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+        <div class="tc-row">
+          <div class="tc-icon">📎</div>
+          <div><div class="tc-label">Archivos</div><div class="tc-count" id="cDocs">—</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="sec-label">Acciones</div>
+    <div class="actions">
+      <button class="btn btn-gallery" id="btnGallery" disabled>
+        <span class="btn-icon">🔮</span>
+        <span class="btn-spin"></span>
+        Escanear + Galería Preview
+      </button>
+      <button class="btn btn-primary" id="btnBulk" disabled>
+        <span class="btn-icon">⬇</span>
+        <span class="btn-spin"></span>
+        Descargar todo del chat
+      </button>
+      <button class="btn btn-outline" id="btnScan" disabled>
+        <span class="btn-icon">⚡</span>
+        <span class="btn-spin"></span>
+        Scan rápido (solo visible)
+      </button>
+    </div>
+
+    <!-- Progress -->
+    <div class="prog" id="prog">
+      <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
+      <div class="prog-row"><span id="progTxt">0 / 0</span><span id="progPct">0%</span></div>
+    </div>
+
+    <!-- Settings -->
+    <div class="sec-label">Configuración</div>
+    <div class="settings">
+      <div class="srow"><label>📁 Carpeta de descarga</label><input id="folder" value="TG_Media" placeholder="TG_Media"></div>
+      <div class="srow"><label>🔓 Contenido restringido</label><div class="toggle on" id="togRestrict"></div></div>
+      <div class="srow"><label>🖱 Botones en chat</label><div class="toggle on" id="togButtons"></div></div>
+    </div>
+
+    <!-- Shortcuts -->
+    <div class="sec-label">Atajos</div>
+    <div class="shortcuts">
+      <div class="sc-row"><label>Descargar media actual</label><span class="kbd">Ctrl+Shift+D</span></div>
+      <div class="sc-row"><label>Abrir galería preview</label><span class="kbd">Ctrl+Shift+G</span></div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="ftr">
+    <p>Hecho por Daniel 🚀</p>
+    <p>v3.1.0</p>
+  </div>
+
+  <script src="js/popup.js"></script>
+</body>
+</html>
