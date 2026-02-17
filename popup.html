@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TG Media Grabber Pro</title>
+  <link rel="stylesheet" href="css/popup.css">
+</head>
+
+<body>
+  <!-- Header -->
+  <div class="header">
+    <div class="header-top">
+      <div class="brand">
+        <div class="logo-glow">
+          <img src="icons/icon48.png" alt="Logo" class="logo-img">
+        </div>
+        <div class="brand-text">
+          <h2>TG Grabber <span class="version-tag">PRO</span></h2>
+          <div class="connection-status">
+            <div id="dot" class="status-dot"></div>
+            <span id="statusTxt" class="status-text">Connecting...</span>
+          </div>
+        </div>
+      </div>
+      <button id="btnSettingsToggle" class="icon-btn" title="Settings">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path
+            d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.49l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.06,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z" />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Media Type Cards -->
+  <div class="card-grid">
+    <div class="type-card sel" data-type="photos">
+      <div class="card-icon">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path
+            d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
+        </svg>
+      </div>
+      <span class="card-count" id="cPhotos">-</span>
+      <span class="card-label">Photos</span>
+    </div>
+    <div class="type-card sel" data-type="videos">
+      <div class="card-icon">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path
+            d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
+        </svg>
+      </div>
+      <span class="card-count" id="cVideos">-</span>
+      <span class="card-label">Videos</span>
+    </div>
+    <div class="type-card sel" data-type="gifs">
+      <div class="card-icon">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path
+            d="M11.5 9H13v6h-1.5zM9 9H6c-.6 0-1 .5-1 1v4c0 .5.4 1 1 1h3c.6 0 1-.5 1-1v-2H8.5v1.5h-2v-3H10V10h-1zM19 10.5V9h-4.5v6H16v-2h2v-1.5h-2v-1z" />
+        </svg>
+      </div>
+      <span class="card-count" id="cGifs">-</span>
+      <span class="card-label">GIFs</span>
+    </div>
+  </div>
+
+  <!-- Action Buttons -->
+  <div class="action-buttons">
+    <button id="btnScan" class="btn secondary">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+        <path
+          d="M11 17h2v-6h-2v6zm1-15C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zM11 9h2V7h-2v2z" />
+      </svg>
+      <span>Scan</span>
+    </button>
+    <button id="btnGallery" class="btn secondary">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+        <path
+          d="M22 16V4c0-1.1-.9-2-2-2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2zm-11-4l2.03 2.71L16 11l4 5H8l3-4zM2 6v14c0 1.1.9 2 2 2h14v-2H4V6H2z" />
+      </svg>
+      <span>Gallery</span>
+    </button>
+  </div>
+
+  <!-- Download Button -->
+  <button id="btnBulk" class="btn primary-gradient" disabled>
+    <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+      <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+    </svg>
+    <span>Download All</span>
+  </button>
+
+  <!-- Progress Section -->
+  <div id="prog" class="progress-section">
+    <div class="progress-header">
+      <span id="progTxt" class="progress-label">Preparing...</span>
+      <span id="progPct" class="progress-pct">0%</span>
+    </div>
+    <div class="prog-bar">
+      <div id="progFill" class="prog-fill"></div>
+    </div>
+    <div class="progress-detail">
+      <span id="progSpeed" class="progress-speed"></span>
+      <span id="progFile" class="progress-file"></span>
+    </div>
+  </div>
+
+  <!-- Collapsible Settings Panel -->
+  <div id="settingsPanel" class="settings-panel">
+    <div class="settings-title">⚙ Settings</div>
+    <div class="setting-row">
+      <span>📁 Download folder</span>
+    </div>
+    <input type="text" id="folder" class="input-text" placeholder="Folder name" value="TG_Media">
+
+    <div class="setting-row" style="margin-top:12px;">
+      <span>Buttons on messages</span>
+      <div id="togButtons" class="toggle on"></div>
+    </div>
+
+    <div class="setting-row">
+      <span>Restricted Mode</span>
+      <div id="togRestrict" class="toggle on"></div>
+    </div>
+  </div>
+
+  <!-- Donation -->
+  <div class="donate-section">
+    <span class="donate-label">Enjoying the extension?</span>
+    <a href="https://ko-fi.com/codeaeternum" target="_blank" class="donate-link">
+      ☕ Buy me a coffee
+    </a>
+  </div>
+
+  <!-- Feedback -->
+  <div class="feedback-section">
+    <a id="btnFeedback" class="feedback-link" href="#">💬 Send Feedback</a>
+  </div>
+
+  <!-- Download History -->
+  <div id="historySection" class="history-section">
+    <button id="btnHistoryToggle" class="history-toggle">
+      <span>📋 History</span>
+      <span id="historyCount" class="history-badge">0</span>
+    </button>
+    <div id="historyPanel" class="history-panel">
+      <div id="historyList" class="history-list"></div>
+      <button id="btnClearHistory" class="btn-clear-history">🗑 Clear history</button>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer-brand">
+    <span>Developed by <strong>Code Aeternum</strong></span>
+  </div>
+
+  <!-- Feedback Modal -->
+  <div id="feedbackOverlay" class="fb-overlay">
+    <div class="fb-modal">
+      <div class="fb-header">
+        <span class="fb-title">💬 Send Feedback</span>
+        <button id="fbClose" class="fb-close">&times;</button>
+      </div>
+      <div class="fb-body">
+        <div class="fb-type-group">
+          <button class="fb-type-btn active" data-type="Bug">🐛 Bug</button>
+          <button class="fb-type-btn" data-type="Feature">💡 Feature</button>
+          <button class="fb-type-btn" data-type="Other">💬 Other</button>
+        </div>
+        <textarea id="fbMessage" class="fb-textarea" placeholder="Tell us what you think..." rows="4"></textarea>
+        <button id="fbSubmit" class="btn primary-gradient fb-submit">
+          <span>Send</span>
+        </button>
+      </div>
+      <div id="fbSuccess" class="fb-success" style="display:none;">
+        <span>✅ Thanks for your feedback!</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/popup.js"></script>
+</body>
+
+</html>

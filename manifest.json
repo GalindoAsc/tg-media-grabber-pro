@@ -1,0 +1,73 @@
+{
+  "manifest_version": 3,
+  "name": "TG Media Grabber Pro",
+  "version": "4.0",
+  "description": "Download photos, videos, GIFs & files from Telegram Web. Bulk download, floating buttons, gallery view & restricted content bypass.",
+  "permissions": [
+    "activeTab",
+    "downloads",
+    "storage",
+    "scripting",
+    "notifications"
+  ],
+  "host_permissions": [
+    "*://web.telegram.org/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "js/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://web.telegram.org/*"
+      ],
+      "js": [
+        "js/content.js"
+      ],
+      "css": [
+        "css/styles.css"
+      ],
+      "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "js/injected.js"
+      ],
+      "matches": [
+        "*://web.telegram.org/*"
+      ]
+    }
+  ],
+  "commands": {
+    "download-current": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+D"
+      },
+      "description": "Download current media"
+    },
+    "open-gallery": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+G"
+      },
+      "description": "Open preview gallery"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}
