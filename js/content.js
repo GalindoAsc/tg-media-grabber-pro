@@ -332,13 +332,20 @@
           if (!src || /avatar|emoji|sticker|profile/i.test(src)) return;
           if (img.width < 40 && img.height < 40) return;
           if (seenEls.has(img)) return;
-          media.push({ type: "photo", el: img, src, thumb: src, name: extractFileName(src, img, "photo") });
+          // Capture per-item data-mid for grouped/album items (each photo has its own mid)
+          const itemMid = container.dataset?.mid || container.closest("[data-mid]")?.dataset?.mid;
+          const photoItem = { type: "photo", el: img, src, thumb: src, name: extractFileName(src, img, "photo") };
+          if (itemMid) photoItem._msgId = itemMid;
+          media.push(photoItem);
           seenEls.add(img);
           return;
         }
         const canvas = container.querySelector("canvas");
         if (canvas && !seenEls.has(canvas)) {
-          media.push({ type: "photo", el: canvas, src: null, thumb: null, name: extractFileName(null, canvas, "photo"), isCanvas: true });
+          const itemMid = container.dataset?.mid || container.closest("[data-mid]")?.dataset?.mid;
+          const canvasItem = { type: "photo", el: canvas, src: null, thumb: null, name: extractFileName(null, canvas, "photo"), isCanvas: true };
+          if (itemMid) canvasItem._msgId = itemMid;
+          media.push(canvasItem);
           seenEls.add(canvas);
         }
       });
@@ -1084,7 +1091,7 @@
     const { type, src, el, name, isCanvas, unloaded } = item;
 
     // ── Strategy 1: Try Telegram API download (fastest, most reliable) ──
-    if (item._fromSharedMedia && item._msgId) {
+    if (item._msgId) {
       const peerId = getPeerId();
       if (peerId) {
         // Pre-download duplicate check: get real filename from metadata BEFORE downloading
@@ -2777,9 +2784,10 @@
       if (!items.length) return;
 
       // Attach message ID to each item for API downloads
+      // Only set parent msgId as fallback — grouped/album items already have per-item _msgId from findMediaInMessage
       const msgId = msg.dataset?.mid;
       if (msgId) {
-        items.forEach(it => { it._msgId = msgId; });
+        items.forEach(it => { if (!it._msgId) it._msgId = msgId; });
       }
 
       // Place button on .bubble-content (the visible message box) not .bubble (full width)
