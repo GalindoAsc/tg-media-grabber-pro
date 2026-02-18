@@ -107,7 +107,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       type: "basic",
       iconUrl: "icons/icon128.png",
       title: "TG Media Grabber Pro",
-      message: `✅ Descarga completa: ${downloaded} nuevo${downloaded !== 1 ? "s" : ""}${skipped > 0 ? `, ${skipped} omitido${skipped !== 1 ? "s" : ""}` : ""}`,
+      message: `✅ Download complete: ${downloaded} file${downloaded !== 1 ? "s" : ""}${skipped > 0 ? `, ${skipped} skipped` : ""}`,
       priority: 1
     });
     chrome.action.setBadgeText({ text: "" });
@@ -141,6 +141,7 @@ chrome.runtime.onInstalled.addListener((details) => {
       buttonsEnabled: true,
       restrictedEnabled: true,
       folderName: "TG_Media",
+      maxFileSizeMB: 2048,
       downloadedFiles: [],
     });
     console.log("[TG Grabber BG] Defaults set");

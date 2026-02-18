@@ -1,6 +1,6 @@
 # TG Media Grabber Pro
 
-![Version](https://img.shields.io/badge/version-4.0-blue) ![License](https://img.shields.io/badge/license-Proprietary-red)
+![Version](https://img.shields.io/badge/version-4.2-blue) ![License](https://img.shields.io/badge/license-MIT-green)
 
 **The ultimate tool for downloading media from Telegram Web (K & A versions).**
 
@@ -17,6 +17,8 @@ TG Media Grabber Pro allows you to easily download photos, videos, GIFs, and doc
 - **📁 Organized Downloads**: Files saved to `TG_Media/{ChatName}/`.
 - **⌨️ Keyboard Shortcut**: `Ctrl+Shift+D` for quick downloads.
 - **🎯 Smart Duplicate Detection**: Skips files already on disk.
+- **📏 Configurable Max File Size**: Auto-skip videos above your chosen limit (500 MB – 4 GB).
+- **🛡️ Resilient Downloads**: Graceful error recovery — never gets stuck on failures.
 
 ## Installation
 
@@ -50,6 +52,7 @@ This extension runs entirely locally on your machine.
 ## Support
 
 - 🌐 Website: [codeaeternum.com](https://codeaeternum.com)
+- 𝕏 Twitter: [@CodeAeternum](https://x.com/CodeAeternum)
 - ☕ Support development: [ko-fi.com/codeaeternum](https://ko-fi.com/codeaeternum)
 
 ## Disclaimer
