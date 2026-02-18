@@ -2371,7 +2371,7 @@
                 log.w(`[DL] No scrollContainer, will scan visible only`);
               }
               let scrollAttempts = 0, staleRounds = 0;
-              const MAX_STALE = 20;
+              const MAX_STALE = 10;
               let lastScrollTop = -1, lastScrollHeight = scrollContainer ? scrollContainer.scrollHeight : 0;
 
               while (scrollAttempts < 500 && staleRounds < MAX_STALE && !acDl.signal.aborted) {
@@ -2459,6 +2459,11 @@
                   if (seenMids.size === prevCount) staleRounds++; else staleRounds = 0;
                 }
                 scrollAttempts++;
+                // Early exit: if we've already downloaded items and hit 5+ stale rounds, no point waiting
+                if (staleRounds >= 5 && (P.downloaded > 0 || P.skipped > 10)) {
+                  log.i(`[DL] Early exit: stale=${staleRounds}, downloaded=${P.downloaded}, skipped=${P.skipped}`);
+                  break;
+                }
                 if (scrollAttempts <= 3 || scrollAttempts % 5 === 0)
                   log.i(`[DL] Loop ${scrollAttempts}: ${seenMids.size} found, ${P.downloaded} dl, ${P.skipped} skip`);
               }
